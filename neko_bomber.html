@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>🐱 NekoBlast!</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@700;800&display=swap');
+
+  :root {
+    --pink: #FFB3C8; --yellow: #FFF3A3; --mint: #B3EFE5;
+    --purple: #D4B3FF; --bg: #FFF5FB; --dark: #4A3560;
+    --wall: #C9AAFF; --wallTop: #DCC8FF;
+    --block: #FFE5A0; --blockTop: #FFF3CC;
+    --ground: #FEF0FA; --groundAlt: #F8E8FF;
+    --fire: #FFB3C8; --fire2: #FFF3A3;
+    --player: #FFB3C8; --cpu: #B3EFE5;
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+
+  body {
+    background: var(--bg);
+    font-family: 'Fredoka One', cursive;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100vw; height: 100vh;
+    overflow: hidden;
+    background-image:
+      radial-gradient(circle at 15% 15%, #FFE0F0 0%, transparent 35%),
+      radial-gradient(circle at 85% 85%, #E0F0FF 0%, transparent 35%);
+  }
+
+  /* ── Portrait layout ── */
+  #layout {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* ── Landscape layout ── */
+  @media (orientation: landscape) {
+    #layout {
+      flex-direction: row;
+      align-items: center;
+      gap: 16px;
+    }
+    #left-panel {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+    #right-panel {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+  }
+
+  @media (orientation: portrait) {
+    #left-panel, #right-panel { display: contents; }
+  }
+
+  h1 {
+    font-size: clamp(1.2rem, 4vw, 2rem);
+    color: var(--dark);
+    text-shadow: 3px 3px 0 var(--pink), 4px 4px 0 rgba(0,0,0,0.07);
+    letter-spacing: 2px;
+    white-space: nowrap;
+  }
+
+  .hud {
+    display: flex;
+    gap: 14px;
+    background: white;
+    border-radius: 20px;
+    padding: 6px 18px;
+    box-shadow: 0 3px 0 var(--pink), 0 5px 12px rgba(0,0,0,0.08);
+    font-size: clamp(0.72rem, 2.5vw, 0.88rem);
+    white-space: nowrap;
+  }
+  .hud-item { display:flex; align-items:center; gap:4px; color:var(--dark); }
+  .hud-item span { font-family:'Nunito',sans-serif; font-weight:800; }
+
+  #canvas-wrap {
+    position: relative;
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 6px 0 var(--purple), 0 10px 28px rgba(0,0,0,0.14);
+    border: 3px solid white;
+    flex-shrink: 0;
+  }
+
+  canvas { display: block; }
+
+  /* ── Virtual pad ── */
+  #vpad {
+    display: none;
+    user-select: none;
+    flex-shrink: 0;
+  }
+
+  .vpad-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+    gap: 6px;
+  }
+
+  .vpad-btn {
+    width: 56px; height: 56px;
+    border-radius: 14px;
+    border: none;
+    font-size: 1.4rem;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 0 rgba(0,0,0,0.12);
+    background: white;
+    transition: transform 0.08s, box-shadow 0.08s;
+    touch-action: manipulation;
+  }
+  .vpad-btn:active, .vpad-btn.pressed {
+    transform: translateY(3px);
+    box-shadow: 0 1px 0 rgba(0,0,0,0.12);
+  }
+  .vpad-empty { width:56px; height:56px; }
+
+  #vbomb {
+    width: 68px; height: 68px;
+    border-radius: 50%;
+    background: var(--pink);
+    font-size: 1.7rem;
+    box-shadow: 0 4px 0 #E880A0;
+    margin-top: 10px;
+  }
+
+  .controls-hint {
+    font-family:'Nunito',sans-serif; font-size:0.72rem;
+    color:#9D80BB; font-weight:700; text-align:center;
+  }
+  .controls-hint kbd {
+    background:white; border:1.5px solid var(--purple);
+    border-radius:5px; padding:1px 5px; color:var(--dark);
+    font-family:'Nunito',sans-serif; font-weight:800;
+    box-shadow:0 1.5px 0 var(--purple);
+  }
+
+  /* ── Overlay ── */
+  #overlay {
+    position:absolute; inset:0;
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    background:rgba(74,53,96,0.78);
+    backdrop-filter:blur(5px);
+    z-index:10; border-radius:11px; gap:10px;
+  }
+  #overlay h2 { font-size:clamp(1.4rem,4vw,2rem); color:var(--yellow); text-shadow:3px 3px 0 #FFCFA3; }
+  #overlay p { font-family:'Nunito',sans-serif; color:white; font-size:0.85rem; font-weight:700; text-align:center; padding:0 12px; }
+  .diff-label { font-family:'Nunito',sans-serif; color:rgba(255,255,255,0.85); font-size:0.78rem; font-weight:700; }
+  .diff-btns { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
+  .diff-btn {
+    font-family:'Fredoka One',cursive; font-size:0.92rem;
+    border:none; border-radius:40px; padding:7px 16px;
+    cursor:pointer; box-shadow:0 3px 0 rgba(0,0,0,0.13);
+    transition:transform 0.1s, box-shadow 0.1s; color:var(--dark);
+  }
+  .diff-btn:hover { transform:translateY(-2px); }
+  .diff-btn:active { transform:translateY(2px); box-shadow:0 1px 0 rgba(0,0,0,0.13); }
+  .diff-btn.selected { outline:3px solid white; }
+  #btn-easy { background:#C8F5D8; } #btn-normal { background:#FFE5A0; } #btn-hard { background:#FFB3C8; }
+  #startBtn {
+    font-family:'Fredoka One',cursive; font-size:1.1rem;
+    background:var(--pink); color:var(--dark);
+    border:none; border-radius:50px; padding:9px 32px;
+    cursor:pointer; box-shadow:0 4px 0 #E880A0, 0 6px 16px rgba(0,0,0,0.13);
+    transition:transform 0.1s, box-shadow 0.1s;
+  }
+  #startBtn:hover { transform:translateY(-2px); }
+  #startBtn:active { transform:translateY(3px); box-shadow:0 1px 0 #E880A0; }
+</style>
+</head>
+<body>
+<div id="layout">
+  <div id="left-panel">
+    <h1>🐱 NekoBlast!</h1>
+    <div class="hud">
+      <div class="hud-item">🐱 <span id="p1lives">❤️❤️❤️</span></div>
+      <div class="hud-item">⏱ <span id="timer">90</span></div>
+      <div class="hud-item">🤖 <span id="cpulives">❤️❤️❤️</span></div>
+    </div>
+  </div>
+
+  <div id="canvas-wrap">
+    <canvas id="gameCanvas"></canvas>
+    <div id="overlay">
+      <h2>🐾 NekoBlast!</h2>
+      <p>矢印キー or バーチャルパッドで移動<br>スペース or 💣ボタンでボム！</p>
+      <div class="diff-label">難易度を選んでね</div>
+      <div class="diff-btns">
+        <button class="diff-btn" id="btn-easy"   onclick="selectDiff('easy')">🌸 かんたん</button>
+        <button class="diff-btn selected" id="btn-normal" onclick="selectDiff('normal')">⭐ ふつう</button>
+        <button class="diff-btn" id="btn-hard"   onclick="selectDiff('hard')">🔥 むずかしい</button>
+      </div>
+      <button id="startBtn">🎮 スタート！</button>
+    </div>
+  </div>
+
+  <div id="right-panel">
+    <div id="vpad">
+      <div style="display:flex;align-items:center;gap:20px;">
+        <div class="vpad-grid">
+          <div class="vpad-empty"></div>
+          <button class="vpad-btn" id="vup">⬆️</button>
+          <div class="vpad-empty"></div>
+          <button class="vpad-btn" id="vleft">⬅️</button>
+          <div class="vpad-empty"></div>
+          <button class="vpad-btn" id="vright">➡️</button>
+          <div class="vpad-empty"></div>
+          <button class="vpad-btn" id="vdown">⬇️</button>
+          <div class="vpad-empty"></div>
+        </div>
+        <button class="vpad-btn" id="vbomb">💣</button>
+      </div>
+    </div>
+    <div class="controls-hint" id="kbHint">
+      <kbd>↑↓←→</kbd> 移動　<kbd>Space</kbd> ボム
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Canvas sizing ──
+const COLS=10, ROWS=10;
+function calcTile() {
+  const isLand = window.innerWidth > window.innerHeight;
+  const margin = isLand ? 320 : 24;
+  const maxW = Math.floor((window.innerWidth - margin) / COLS);
+  const maxH = Math.floor((window.innerHeight - (isLand ? 40 : 140)) / ROWS);
+  return Math.max(32, Math.min(52, maxW, maxH));
+}
+let TILE = calcTile();
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+function resizeCanvas() {
+  TILE = calcTile();
+  canvas.width = TILE*COLS; canvas.height = TILE*ROWS;
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+// ── Touch detection ──
+const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+if (isTouch) {
+  document.getElementById('vpad').style.display = 'block';
+  document.getElementById('kbHint').style.display = 'none';
+}
+
+// ── Difficulty ──
+const DIFF = {
+  easy:   { moveInterval:30, bombInterval:[160,240], bombRange:1, chaseRate:0.35, fleeRange:2 },
+  normal: { moveInterval:18, bombInterval:[90,150],  bombRange:2, chaseRate:0.70, fleeRange:3 },
+  hard:   { moveInterval:10, bombInterval:[50,85],   bombRange:3, chaseRate:0.90, fleeRange:4 },
+};
+let currentDiff = 'normal';
+function selectDiff(d) {
+  currentDiff = d;
+  document.querySelectorAll('.diff-btn').forEach(b=>b.classList.remove('selected'));
+  document.getElementById('btn-'+d).classList.add('selected');
+}
+
+// ── State ──
+let map=[], bombs=[], fires=[], particles=[];
+let gameRunning=false, gameTimer=90, timerInterval=null, animFrame=null;
+const player = { px:0, py:0, alive:true, lives:3, immune:0, bombRange:2 };
+const cpu    = { px:0, py:0, alive:true, lives:3, immune:0 };
+let cpuMoveTimer=0, cpuBombTimer=0;
+let playerMoveTimer=0, bombPressed=false;
+
+// ── Virtual keys ──
+const keys = {};
+const vmap = { vup:'ArrowUp', vdown:'ArrowDown', vleft:'ArrowLeft', vright:'ArrowRight', vbomb:'Space' };
+Object.entries(vmap).forEach(([id,code])=>{
+  const el=document.getElementById(id); if(!el) return;
+  const press   = e=>{ e.preventDefault(); keys[code]=true;  el.classList.add('pressed'); };
+  const release = e=>{ e.preventDefault(); keys[code]=false; el.classList.remove('pressed'); };
+  el.addEventListener('touchstart', press,   {passive:false});
+  el.addEventListener('touchend',   release, {passive:false});
+  el.addEventListener('mousedown',  press);
+  el.addEventListener('mouseup',    release);
+});
+document.addEventListener('keydown', e=>{ keys[e.code]=true;  if(e.code==='Space')e.preventDefault(); });
+document.addEventListener('keyup',   e=>{ keys[e.code]=false; });
+
+// ── Map ──
+function initMap() {
+  map=[];
+  for(let r=0;r<ROWS;r++){
+    map[r]=[];
+    for(let c=0;c<COLS;c++){
+      if(r===0||r===ROWS-1||c===0||c===COLS-1){map[r][c]=1;continue;}
+      if(r%2===0&&c%2===0){map[r][c]=1;continue;}
+      const safe=(r<=2&&c<=2)||(r<=2&&c>=COLS-3)||(r>=ROWS-3&&c<=2)||(r>=ROWS-3&&c>=COLS-3);
+      map[r][c]=(!safe&&Math.random()<0.42)?2:0;
+    }
+  }
+}
+
+function canMove(gx,gy){ return gx>=0&&gx<COLS&&gy>=0&&gy<ROWS&&map[gy][gx]===0; }
+function hasBombAt(gx,gy){ return bombs.some(b=>b.x===gx&&b.y===gy); }
+
+// ── Danger map for CPU ──
+function buildDangerSet() {
+  const danger = new Set();
+  for(const b of bombs){
+    const dirs=[[0,0],[1,0],[-1,0],[0,1],[0,-1]];
+    for(const [dx,dy] of dirs){
+      const r=dx===0&&dy===0?0:b.range;
+      for(let i=0;i<=r;i++){
+        const fx=b.x+dx*i, fy=b.y+dy*i;
+        if(fx<0||fx>=COLS||fy<0||fy>=ROWS) break;
+        if(map[fy][fx]===1) break;
+        danger.add(`${fx},${fy}`);
+        if(map[fy][fx]===2) break;
+      }
+    }
+  }
+  for(const f of fires) danger.add(`${f.x},${f.y}`);
+  return danger;
+}
+
+// ── Bomb ──
+function placeBomb(entity, isCpu=false){
+  const gx=Math.round(entity.px/TILE), gy=Math.round(entity.py/TILE);
+  if(hasBombAt(gx,gy)) return;
+  const range=isCpu?DIFF[currentDiff].bombRange:player.bombRange;
+  bombs.push({x:gx, y:gy, timer:150, range, owner:isCpu?'cpu':'player'});
+}
+
+function explodeBomb(bomb){
+  const dirs=[[0,0],[1,0],[-1,0],[0,1],[0,-1]];
+  for(const [dx,dy] of dirs){
+    const r=dx===0&&dy===0?0:bomb.range;
+    for(let i=0;i<=r;i++){
+      const fx=bomb.x+dx*i, fy=bomb.y+dy*i;
+      if(fx<0||fx>=COLS||fy<0||fy>=ROWS) break;
+      if(map[fy][fx]===1) break;
+      if(!fires.some(f=>f.x===fx&&f.y===fy)) fires.push({x:fx,y:fy,timer:55});
+      spawnFireParts(fx*TILE+TILE/2, fy*TILE+TILE/2);
+      if(map[fy][fx]===2){map[fy][fx]=0; break;}
+    }
+  }
+  for(const b of bombs) if(b!==bomb&&fires.some(f=>f.x===b.x&&f.y===b.y)) b.timer=1;
+}
+
+function spawnFireParts(px,py){
+  for(let i=0;i<5;i++) particles.push({
+    x:px, y:py, vx:(Math.random()-.5)*5, vy:(Math.random()-.5)*5,
+    life:25+Math.random()*20, maxLife:45, r:3+Math.random()*4,
+    color:Math.random()<.5?'#FFB3C8':'#FFF3A3',
+  });
+}
+
+function checkFireHit(entity){
+  if(entity.immune>0) return;
+  const gx=Math.round(entity.px/TILE), gy=Math.round(entity.py/TILE);
+  if(fires.some(f=>f.x===gx&&f.y===gy)){
+    entity.lives--; entity.immune=90;
+    if(entity.lives<=0) entity.alive=false;
+    updateHUD();
+  }
+}
+
+// ── CPU AI (danger-aware) ──
+const CPU_DIRS=[[1,0],[-1,0],[0,1],[0,-1]];
+function updateCPU(){
+  if(!cpu.alive) return;
+  cpu.immune=Math.max(0,cpu.immune-1);
+  cpuMoveTimer--; cpuBombTimer--;
+  const d=DIFF[currentDiff];
+
+  if(cpuMoveTimer<=0){
+    cpuMoveTimer=d.moveInterval+Math.floor(Math.random()*8);
+    const gx=Math.round(cpu.px/TILE), gy=Math.round(cpu.py/TILE);
+    const pgx=Math.round(player.px/TILE), pgy=Math.round(player.py/TILE);
+    const danger=buildDangerSet();
+    const inDanger=danger.has(`${gx},${gy}`);
+
+    let chosen=null;
+    if(inDanger){
+      // flee to safe tile
+      const safe=CPU_DIRS
+        .map(([dx,dy])=>({dx,dy,nx:gx+dx,ny:gy+dy}))
+        .filter(({nx,ny})=>canMove(nx,ny)&&!hasBombAt(nx,ny)&&!danger.has(`${nx},${ny}`));
+      if(safe.length) chosen=safe[Math.floor(Math.random()*safe.length)];
+      else {
+        // no fully safe tile — pick least dangerous
+        const opts=CPU_DIRS
+          .map(([dx,dy])=>({dx,dy,nx:gx+dx,ny:gy+dy}))
+          .filter(({nx,ny})=>canMove(nx,ny)&&!hasBombAt(nx,ny));
+        if(opts.length) chosen=opts[Math.floor(Math.random()*opts.length)];
+      }
+    } else {
+      // chase or random
+      const opts=CPU_DIRS
+        .map(([dx,dy])=>({dx,dy,nx:gx+dx,ny:gy+dy}))
+        .filter(({nx,ny})=>canMove(nx,ny)&&!hasBombAt(nx,ny)&&!danger.has(`${nx},${ny}`));
+      if(opts.length){
+        opts.sort((a,b)=>(Math.abs(a.nx-pgx)+Math.abs(a.ny-pgy))-(Math.abs(b.nx-pgx)+Math.abs(b.ny-pgy)));
+        chosen=Math.random()<d.chaseRate?opts[0]:opts[Math.floor(Math.random()*opts.length)];
+      }
+    }
+    if(chosen){ cpu.px=chosen.nx*TILE; cpu.py=chosen.ny*TILE; }
+  }
+
+  // place bomb only if NOT in danger zone after placement
+  if(cpuBombTimer<=0){
+    const [lo,hi]=d.bombInterval;
+    cpuBombTimer=lo+Math.floor(Math.random()*(hi-lo));
+    const gx=Math.round(cpu.px/TILE), gy=Math.round(cpu.py/TILE);
+    const danger=buildDangerSet();
+    // check escape route exists before placing
+    const hasEscape=CPU_DIRS.some(([dx,dy])=>{
+      const nx=gx+dx, ny=gy+dy;
+      return canMove(nx,ny)&&!hasBombAt(nx,ny)&&!danger.has(`${nx},${ny}`);
+    });
+    if(hasEscape) placeBomb(cpu,true);
+  }
+}
+
+// ── Player ──
+function updatePlayer(){
+  if(!player.alive) return;
+  player.immune=Math.max(0,player.immune-1);
+  playerMoveTimer=Math.max(0,playerMoveTimer-1);
+  if(playerMoveTimer<=0){
+    const gx=Math.round(player.px/TILE), gy=Math.round(player.py/TILE);
+    let moved=false;
+    if(keys['ArrowRight']&&canMove(gx+1,gy)&&!hasBombAt(gx+1,gy)){player.px=(gx+1)*TILE;moved=true;}
+    else if(keys['ArrowLeft']&&canMove(gx-1,gy)&&!hasBombAt(gx-1,gy)){player.px=(gx-1)*TILE;moved=true;}
+    else if(keys['ArrowDown']&&canMove(gx,gy+1)&&!hasBombAt(gx,gy+1)){player.py=(gy+1)*TILE;moved=true;}
+    else if(keys['ArrowUp']&&canMove(gx,gy-1)&&!hasBombAt(gx,gy-1)){player.py=(gy-1)*TILE;moved=true;}
+    if(moved) playerMoveTimer=10;
+  }
+  if(keys['Space']&&!bombPressed){placeBomb(player);bombPressed=true;}
+  if(!keys['Space']) bombPressed=false;
+}
+
+// ── HUD ──
+function updateHUD(){
+  document.getElementById('p1lives').textContent='❤️'.repeat(Math.max(0,player.lives));
+  document.getElementById('cpulives').textContent='❤️'.repeat(Math.max(0,cpu.lives));
+  document.getElementById('timer').textContent=gameTimer;
+}
+
+// ── Drawing ──
+function drawTile(c,r){
+  ctx.fillStyle=(c+r)%2===0?'#FEF0FA':'#F8E8FF';
+  ctx.fillRect(c*TILE,r*TILE,TILE,TILE);
+  ctx.fillStyle='rgba(0,0,0,0.025)';
+  ctx.beginPath(); ctx.arc(c*TILE+TILE/2,r*TILE+TILE/2,2,0,Math.PI*2); ctx.fill();
+}
+function drawWall(c,r){
+  const x=c*TILE,y=r*TILE;
+  ctx.fillStyle='#C9AAFF'; ctx.fillRect(x,y,TILE,TILE);
+  ctx.fillStyle='#DCC8FF'; ctx.fillRect(x+2,y+2,TILE-4,8);
+  ctx.fillStyle='rgba(255,255,255,0.22)'; ctx.fillRect(x+5,y+4,4,3);
+}
+function drawBlock(c,r){
+  const x=c*TILE,y=r*TILE;
+  ctx.fillStyle='#FFE5A0'; ctx.fillRect(x+2,y+2,TILE-4,TILE-4);
+  ctx.fillStyle='#FFF3CC'; ctx.fillRect(x+4,y+4,TILE-8,8);
+  ctx.fillStyle='rgba(0,0,0,0.06)'; ctx.fillRect(x+2,y+TILE-7,TILE-4,5);
+  ctx.fillStyle='rgba(255,255,255,0.4)'; ctx.beginPath(); ctx.arc(x+9,y+9,2,0,Math.PI*2); ctx.fill();
+}
+
+// ── Bomb danger preview ──
+function drawDangerPreview(){
+  for(const b of bombs){
+    const dirs=[[0,0],[1,0],[-1,0],[0,1],[0,-1]];
+    for(const [dx,dy] of dirs){
+      const r=dx===0&&dy===0?0:b.range;
+      for(let i=0;i<=r;i++){
+        const fx=b.x+dx*i, fy=b.y+dy*i;
+        if(fx<0||fx>=COLS||fy<0||fy>=ROWS) break;
+        if(map[fy][fx]===1) break;
+        const alpha=b.timer<60?0.35:0.18;
+        ctx.fillStyle=`rgba(255,80,120,${alpha})`;
+        ctx.fillRect(fx*TILE+1,fy*TILE+1,TILE-2,TILE-2);
+        if(map[fy][fx]===2) break;
+      }
+    }
+  }
+}
+
+function drawCat(px,py,color,immune,label){
+  const T=TILE, x=px+T/2, y=py+T/2;
+  ctx.globalAlpha=(immune>0&&Math.floor(immune/5)%2===0)?0.35:1;
+  const s=T/48; // scale factor
+
+  ctx.fillStyle='rgba(0,0,0,0.07)';
+  ctx.beginPath(); ctx.ellipse(x,py+T-4,13*s,5*s,0,0,Math.PI*2); ctx.fill();
+
+  ctx.fillStyle=color;
+  ctx.beginPath(); ctx.ellipse(x,y+4*s,15*s,13*s,0,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(x,y-10*s,13*s,11*s,0,0,Math.PI*2); ctx.fill();
+
+  [[x-9*s,y-17*s,x-15*s,y-27*s,x-3*s,y-19*s],[x+9*s,y-17*s,x+15*s,y-27*s,x+3*s,y-19*s]].forEach(([ax,ay,bx,by,cx2,cy2])=>{
+    ctx.fillStyle=color;
+    ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(bx,by); ctx.lineTo(cx2,cy2); ctx.closePath(); ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,0.38)';
+    ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(bx+1,by+2); ctx.lineTo(cx2,cy2); ctx.closePath(); ctx.fill();
+  });
+
+  ctx.fillStyle='#4A3560';
+  ctx.beginPath(); ctx.ellipse(x-5*s,y-11*s,3*s,3.5*s,0,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(x+5*s,y-11*s,3*s,3.5*s,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='white';
+  ctx.beginPath(); ctx.arc(x-4*s,y-12*s,1.3*s,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x+6*s,y-12*s,1.3*s,0,Math.PI*2); ctx.fill();
+
+  ctx.fillStyle='#FFD6E8';
+  ctx.beginPath(); ctx.ellipse(x,y-7*s,2*s,1.5*s,0,0,Math.PI*2); ctx.fill();
+  ctx.strokeStyle='#4A3560'; ctx.lineWidth=1.2*s; ctx.lineCap='round';
+  ctx.beginPath(); ctx.moveTo(x,y-5.5*s); ctx.lineTo(x-3*s,y-3*s); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x,y-5.5*s); ctx.lineTo(x+3*s,y-3*s); ctx.stroke();
+
+  ctx.strokeStyle=color; ctx.lineWidth=4*s; ctx.lineCap='round';
+  ctx.beginPath(); ctx.moveTo(x+12*s,y+10*s);
+  ctx.bezierCurveTo(x+24*s,y+4*s,x+20*s,y-10*s,x+14*s,y-6*s); ctx.stroke();
+
+  ctx.globalAlpha=1;
+  ctx.fillStyle='#4A3560';
+  ctx.font=`${Math.max(8,T*0.2)}px Fredoka One`;
+  ctx.textAlign='center'; ctx.fillText(label,x,py+T+11);
+}
+
+function drawBomb(b){
+  const x=b.x*TILE+TILE/2, y=b.y*TILE+TILE/2, s=TILE/48;
+  const pulse=1+0.07*Math.sin(Date.now()*0.012);
+  ctx.fillStyle=b.timer<60?'#FFAAC8':'#4A3560';
+  ctx.beginPath(); ctx.ellipse(x,y+2*s,13*s*pulse,12*s*pulse,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='rgba(255,255,255,0.18)';
+  ctx.beginPath(); ctx.ellipse(x-4*s,y-4*s,5*s,4*s,-0.5,0,Math.PI*2); ctx.fill();
+  ctx.strokeStyle='#FFB3C8'; ctx.lineWidth=2.2*s;
+  ctx.beginPath(); ctx.moveTo(x+3*s,y-11*s); ctx.bezierCurveTo(x+9*s,y-19*s,x+1*s,y-24*s,x+7*s,y-28*s); ctx.stroke();
+  ctx.fillStyle='#FFF3A3';
+  ctx.beginPath(); ctx.arc(x+7*s,y-28*s,2.5*s+Math.random()*s,0,Math.PI*2); ctx.fill();
+}
+
+function drawFire(f){
+  const x=f.x*TILE, y=f.y*TILE, prog=f.timer/55;
+  ctx.globalAlpha=prog*0.88;
+  ['#FFF3A3','#FFB3C8','#FFD6E8'].forEach((col,i)=>{
+    ctx.fillStyle=col;
+    const sz=(TILE-6)*prog*(1-i*0.15);
+    ctx.beginPath(); ctx.ellipse(x+TILE/2,y+TILE/2,sz/2,sz/2,0,0,Math.PI*2); ctx.fill();
+  });
+  ctx.globalAlpha=1;
+}
+
+function drawParticles(){
+  for(const p of particles){
+    ctx.globalAlpha=p.life/p.maxLife;
+    ctx.fillStyle=p.color;
+    ctx.beginPath(); ctx.arc(p.x,p.y,p.r*(p.life/p.maxLife),0,Math.PI*2); ctx.fill();
+  }
+  ctx.globalAlpha=1;
+}
+
+// ── Game Over ──
+function checkGameOver(){ if(!player.alive||!cpu.alive||gameTimer<=0) endGame(); }
+function endGame(){
+  gameRunning=false; clearInterval(timerInterval); cancelAnimationFrame(animFrame);
+  const ov=document.getElementById('overlay');
+  const h2=ov.querySelector('h2'), p=ov.querySelector('p'), btn=document.getElementById('startBtn');
+  if(!player.alive&&!cpu.alive){h2.textContent='🐾 引き分け！';p.textContent='お互い力尽きた…';}
+  else if(!player.alive){h2.textContent='😿 負け…';p.textContent='次は勝てる！もう一回！';}
+  else if(!cpu.alive){h2.textContent='🎉 勝ち！';p.textContent='CPUを倒した！やったね！';}
+  else{h2.textContent='⏰ 時間切れ！';p.textContent=player.lives>cpu.lives?'ライフ多くて勝ち！':'引き分け…';}
+  btn.textContent='🔄 もう一回！';
+  ov.style.display='flex';
+}
+
+// ── Main loop ──
+function startGame(){
+  resizeCanvas();
+  initMap();
+  bombs=[]; fires=[]; particles=[];
+  player.px=TILE; player.py=TILE; player.alive=true; player.lives=3; player.immune=0; player.bombRange=2;
+  cpu.px=(COLS-2)*TILE; cpu.py=(ROWS-2)*TILE; cpu.alive=true; cpu.lives=3; cpu.immune=0;
+  cpuMoveTimer=40; cpuBombTimer=100;
+  gameTimer=90; gameRunning=true; playerMoveTimer=0; bombPressed=false;
+  updateHUD();
+  document.getElementById('overlay').style.display='none';
+  clearInterval(timerInterval);
+  timerInterval=setInterval(()=>{
+    if(!gameRunning) return;
+    gameTimer--; document.getElementById('timer').textContent=gameTimer;
+    if(gameTimer<=0) endGame();
+  },1000);
+
+  function loop(){
+    if(!gameRunning) return;
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    updatePlayer(); updateCPU();
+    const toEx=bombs.filter(b=>{b.timer--;return b.timer<=0;});
+    toEx.forEach(explodeBomb);
+    bombs=bombs.filter(b=>b.timer>0);
+    fires.forEach(f=>f.timer--); fires=fires.filter(f=>f.timer>0);
+    particles.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=0.12;p.life--;});
+    particles=particles.filter(p=>p.life>0);
+    checkFireHit(player); checkFireHit(cpu); updateHUD();
+
+    for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
+      drawTile(c,r);
+      if(map[r][c]===1) drawWall(c,r);
+      else if(map[r][c]===2) drawBlock(c,r);
+    }
+    drawDangerPreview();
+    drawParticles();
+    fires.forEach(drawFire);
+    bombs.forEach(drawBomb);
+    if(player.alive) drawCat(player.px,player.py,'#FFB3C8',player.immune,'🐱 You');
+    if(cpu.alive)    drawCat(cpu.px,   cpu.py,   '#B3EFE5',cpu.immune,  '🤖 CPU');
+    checkGameOver();
+    animFrame=requestAnimationFrame(loop);
+  }
+  loop();
+}
+
+document.getElementById('startBtn').addEventListener('click', startGame);
+</script>
+</body>
+</html>
